@@ -1,4 +1,4 @@
-name: mlflow-demo
+name: finansdep_flow
 
 conda_env: environment.yml
 
@@ -9,6 +9,5 @@ conda_env: environment.yml
 entry_points:
   main:
     parameters:
-      data_file: path
-      alpha: {type: float, default: 1.0}
-    command: "python train.py -a {alpha} -d {data_file}"
+      data_file: {type: string, default: MELBOURNE_HOUSE_PRICES_LESS.csv}
+    command: "python train.py -d {data_file}"
