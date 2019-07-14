@@ -29,7 +29,10 @@ class HousePricePredictor(mlflow.pyfunc.PythonModel):
         print(type(model_input))
         df = model_input
         df[categorical_feature_names] = df[categorical_feature_names].astype("category")
-        df[columns_to_encode] = self.encoder.transform(df[columns_to_encode])
+        new_cols = self.encoder.transform(df[columns_to_encode])
+        for c in categorical_feature_names:
+            df[c] = df[c].cat.codes.astype(int)
+        df.loc[:, columns_to_encode] = new_cols
         df["Month"] = df["Date"].dt.month
         df["Year"] = df["Date"].dt.year 
         df = df.drop("Date", axis=1)
@@ -38,8 +41,12 @@ class HousePricePredictor(mlflow.pyfunc.PythonModel):
         shap_values = explainer.shap_values(Pool(df, pred, cat_features=cat_col_idx))
         print(shap_values)
         resp = {}
-        resp["Prediction"] = pred
-        resp["Explanation"] = {name:value for name, value in zip(df.columns, shap_values)}
+        global_mean = np.exp(explainer.expected_value)
+        resp = {}
+        resp["Predictions"] = np.exp(pred).tolist()
+        resp["Explanations"] = [{name:(global_mean-(global_mean*np.exp(value)))*-1 for name, value in zip(df.columns, example_shap)} for example_shap in shap_values]
+        for e in resp["Explanations"]:
+            e["Global mean"] = global_mean
         return json.dumps(resp)
 
 parser = argparse.ArgumentParser()
@@ -129,7 +136,7 @@ if __name__ == "__main__":
 
         cat_col_idx = np.array([rfc_X_train.columns.get_loc(c) for c in columns_to_encode])
         rfc = CatBoostRegressor(iterations=500, loss_function="RMSE", task_type="CPU", border_count=256, model_size_reg=0)
-        rfc.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=True)
+        rfc.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
         explainer = shap.TreeExplainer(rfc)
         
         housereg = HousePricePredictor(rfc_enc, explainer, cat_col_idx, rfc)
