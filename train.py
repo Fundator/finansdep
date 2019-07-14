@@ -46,8 +46,8 @@ class HousePricePredictor(mlflow.pyfunc.PythonModel):
         resp["Predictions"] = np.exp(pred).tolist()
         resp["Explanations"] = [{name:(global_mean-(global_mean*np.exp(value)))*-1 for name, value in zip(df.columns, example_shap)} for example_shap in shap_values]
         for e in resp["Explanations"]:
-            e["Global mean"] = global_mean
-        return json.dumps(resp)
+            e["GlobalMean"] = global_mean
+        return resp
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--seed", help="Specify seed for reproducibility", type=int, default=42)
