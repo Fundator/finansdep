@@ -18,11 +18,12 @@ columns_to_drop = ["Address", "Date", "Price", "SellerG", "LogPrice"]
 
 class HousePricePredictor(mlflow.pyfunc.PythonModel):
 
-    def __init__(self, encoder, explainer, cat_col_idx, reg):
+    def __init__(self, encoder, explainer, cat_col_idx, reg, log_target=False):
         self.encoder = encoder
         self.reg = reg
         self.explainer = explainer
         self.cat_col_idx = cat_col_idx
+        self.log_target = log_target
         
     def predict(self, context, model_input):
         print(model_input)
@@ -41,10 +42,14 @@ class HousePricePredictor(mlflow.pyfunc.PythonModel):
         shap_values = explainer.shap_values(Pool(df, pred, cat_features=cat_col_idx))
         print(shap_values)
         resp = {}
-        global_mean = np.exp(explainer.expected_value)
-        resp = {}
-        resp["Predictions"] = np.exp(pred).tolist()
-        resp["Explanations"] = [{name:(global_mean-(global_mean*np.exp(value)))*-1 for name, value in zip(df.columns, example_shap)} for example_shap in shap_values]
+        if self.log_target:
+            global_mean = np.exp(explainer.expected_value)
+            resp["Predictions"] = np.exp(pred).tolist()
+            resp["Explanations"] = [{name:(global_mean-(global_mean*np.exp(value)))*-1 for name, value in zip(df.columns, example_shap)} for example_shap in shap_values]
+        else:
+            global_mean = explainer.expected_value
+            resp["Predictions"] = pred.tolist()
+            resp["Explanations"] = [{name:value for name, value in zip(df.columns, example_shap)} for example_shap in shap_values]
         for e in resp["Explanations"]:
             e["GlobalMean"] = global_mean
         return resp
@@ -126,25 +131,25 @@ if __name__ == "__main__":
         rfc_train, rfc_valid, rfc_holdout_test = split_dataset(rfc_df, val_idx, holdout_test_idx)
 
         rfc_X_train = rfc_train.drop(columns=columns_to_drop)
-        rfc_y_train = rfc_train["LogPrice"]
+        rfc_y_train = rfc_train["Price"]
 
         rfc_X_valid = rfc_valid.drop(columns=columns_to_drop)
-        rfc_y_valid = rfc_valid["LogPrice"]
+        rfc_y_valid = rfc_valid["Price"]
 
         rfc_X_test = rfc_holdout_test.drop(columns=columns_to_drop)
-        rfc_y_test = rfc_holdout_test["LogPrice"]
+        rfc_y_test = rfc_holdout_test["Price"]
 
         cat_col_idx = np.array([rfc_X_train.columns.get_loc(c) for c in columns_to_encode])
         rfc = CatBoostRegressor(iterations=500, loss_function="RMSE", task_type="CPU", border_count=256, model_size_reg=0)
         rfc.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
         explainer = shap.TreeExplainer(rfc)
         
-        housereg = HousePricePredictor(rfc_enc, explainer, cat_col_idx, rfc)
+        housereg = HousePricePredictor(rfc_enc, explainer, cat_col_idx, rfc, log_target=False)
         print("Saving model to "+model_path)
         mlflow.pyfunc.save_model(model_path, conda_env=conda_env_path, python_model=housereg)
         
         rfc_pred = rfc.predict(rfc_X_test)
 
-        rfc_metrics = get_metrics(rfc_y_test, rfc_pred)
+        rfc_metrics = get_metrics(rfc_y_test, rfc_pred, log_target=False)
         for metric_name, metric_value in rfc_metrics.items():
             mlflow.log_metric(metric_name, metric_value) 
