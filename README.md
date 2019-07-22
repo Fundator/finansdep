@@ -1,4 +1,4 @@
-# Verdifastsettelse av fritidsboliger
+﻿# Verdifastsettelse av fritidsboliger
 
 ## Instruksjoner for å kunne bruke notebook
 - [Last ned og installer anaconda for python 3.7 for ditt operativsystem](https://www.anaconda.com/distribution/). Følg anbefalte innstillinger
@@ -28,6 +28,7 @@ Man kan så starte jupyter notebook ved å skrive inn følgende kommando i anaco
 jupyter notebook
 ~~~~
 
-Naviger deg til mappen der notebooken ligger, og åpne denne. Man kan så eksekvere celler i jupyter notebook sekvensielt
+Man vil da åpne en ny fane i nettleseren som kjører jupyter notebook. Hvis denne fanen ikke åpnes, kan du skrive følgende adresse i adressefeltet til nettleseren:  `http://localhost:8888/` 
+Naviger deg til mappen der filen med navn 'Finansdepartementet.ipynb' ligger, og åpne denne. Man kan så eksekvere celler i jupyter notebook sekvensielt
 
 
