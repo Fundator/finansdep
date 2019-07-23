@@ -7,7 +7,7 @@
 Når man har installert anaconda, åpne programmet **anaconda prompt** og skriv inn følgende kommando
 
 ~~~~
-conda env create -f environment.yml
+conda env create -f environment_notebook.yml
 ~~~~
 
 Man kan så liste opp alle conda enviromnents ved hjelp av følgende kommando
