@@ -18,9 +18,11 @@ columns_to_drop = ["Address", "Date", "Price", "SellerG", "LogPrice"]
 
 class HousePricePredictor(mlflow.pyfunc.PythonModel):
 
-    def __init__(self, encoder, explainer, cat_col_idx, reg, log_target=False):
+    def __init__(self, encoder, explainer, cat_col_idx, reg, qreg_upper, qreg_lower, log_target=False):
         self.encoder = encoder
         self.reg = reg
+        self.qreg_upper = qreg_upper
+        self.qreg_lower = qreg_lower
         self.explainer = explainer
         self.cat_col_idx = cat_col_idx
         self.log_target = log_target
@@ -39,16 +41,22 @@ class HousePricePredictor(mlflow.pyfunc.PythonModel):
         df = df.drop("Date", axis=1)
         print(df)
         pred = self.reg.predict(df)
+        pred_upper = self.qreg_upper.predict(df)
+        pred_lower = self.qreg_lower.predict(df)
         shap_values = explainer.shap_values(Pool(df, pred, cat_features=cat_col_idx))
         print(shap_values)
         resp = {}
         if self.log_target:
             global_mean = np.exp(explainer.expected_value)
             resp["Predictions"] = np.exp(pred).tolist()
+            resp["Predictions_P95"] = np.exp(pred_upper).tolist()
+            resp["Predictions_P05"] = np.exp(pred_lower).tolist()
             resp["Explanations"] = [{name:(global_mean-(global_mean*np.exp(value)))*-1 for name, value in zip(df.columns, example_shap)} for example_shap in shap_values]
         else:
             global_mean = explainer.expected_value
             resp["Predictions"] = pred.tolist()
+            resp["Predictions_P95"] = pred_upper.tolist()
+            resp["Predictions_P05"] = pred_lower.tolist()
             resp["Explanations"] = [{name:value for name, value in zip(df.columns, example_shap)} for example_shap in shap_values]
         for e in resp["Explanations"]:
             e["GlobalMean"] = global_mean
@@ -142,9 +150,14 @@ if __name__ == "__main__":
         cat_col_idx = np.array([rfc_X_train.columns.get_loc(c) for c in columns_to_encode])
         rfc = CatBoostRegressor(iterations=500, loss_function="RMSE", task_type="CPU", border_count=256, model_size_reg=0)
         rfc.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
+        qreg_u = CatBoostRegressor(iterations=1000, loss_function="Quantile:alpha=0.95", task_type="CPU", border_count=256, model_size_reg=0)
+        qreg_u.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
+        qreg_l = CatBoostRegressor(iterations=10000, loss_function="Quantile:alpha=0.05", task_type="CPU", border_count=256, model_size_reg=0)
+        qreg_l.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
+        
         explainer = shap.TreeExplainer(rfc)
         
-        housereg = HousePricePredictor(rfc_enc, explainer, cat_col_idx, rfc, log_target=False)
+        housereg = HousePricePredictor(rfc_enc, explainer, cat_col_idx, rfc, qreg_u, qreg_l, log_target=False)
         print("Saving model to "+model_path)
         mlflow.pyfunc.save_model(model_path, conda_env=conda_env_path, python_model=housereg)
         
