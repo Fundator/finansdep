@@ -116,6 +116,7 @@ if __name__ == "__main__":
         artifact_uri = mlflow.get_artifact_uri()
         print("Saving artifacts to "+artifact_uri)
         model_path = artifact_uri+model_prefix
+        model_path = model_path.replace("file://", "")
         mlflow.log_param("seed", seed)
         mlflow.log_param("data_file", data_file)
         
@@ -150,10 +151,10 @@ if __name__ == "__main__":
         cat_col_idx = np.array([rfc_X_train.columns.get_loc(c) for c in columns_to_encode])
         rfc = CatBoostRegressor(iterations=500, loss_function="RMSE", task_type="CPU", border_count=256, model_size_reg=0)
         rfc.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
-        qreg_u = CatBoostRegressor(iterations=1000, loss_function="Quantile:alpha=0.95", task_type="CPU", border_count=256, model_size_reg=0)
-        qreg_u.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
-        qreg_l = CatBoostRegressor(iterations=10000, loss_function="Quantile:alpha=0.05", task_type="CPU", border_count=256, model_size_reg=0)
-        qreg_l.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=True, plot=False)
+        qreg_u = CatBoostRegressor(iterations=100000, loss_function="Quantile:alpha=0.95", learning_rate=100, task_type="CPU", border_count=256, model_size_reg=0)
+        qreg_u.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=False, plot=False)
+        qreg_l = CatBoostRegressor(iterations=100000, loss_function="Quantile:alpha=0.05", learning_rate=100, task_type="CPU", border_count=256, model_size_reg=0)
+        qreg_l.fit(X=rfc_X_train, y=rfc_y_train, cat_features=cat_col_idx, eval_set=(rfc_X_valid, rfc_y_valid), silent=False, plot=False)
         
         explainer = shap.TreeExplainer(rfc)
         
@@ -162,6 +163,7 @@ if __name__ == "__main__":
         mlflow.pyfunc.save_model(model_path, conda_env=conda_env_path, python_model=housereg)
         
         rfc_pred = rfc.predict(rfc_X_test)
+        
 
         rfc_metrics = get_metrics(rfc_y_test, rfc_pred, log_target=False)
         for metric_name, metric_value in rfc_metrics.items():
